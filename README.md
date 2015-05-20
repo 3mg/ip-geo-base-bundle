@@ -33,6 +33,7 @@ php app/console ipgeobase:update
 ## Usage:
 
 The bundle's service `ip_geo_base` contains two methods:
+
 1. `getIpInfo` returns information about IP (a range and a country code) or `null`.
 2. `getIpCity` returns an instance of a GeoCity model or `null`. You can configure the default city which is returned
 if there is no any right city in the database (see the `Configuration` section).
@@ -46,6 +47,7 @@ $this->get('ip_geo_base')->getIpInfo('92.242.13.250');
 ## Configuration
 
 There are two optional parameters that you can set:
+
 1. `default_city` - the default city ID. You can look it out in the `geo_city` table.
 2. `enabled` - the state of IP detection service (default `true`). You can set `false` if you need to disable
 this service for a while. In this case the `getIpCity` method will always return `null` or the default city
