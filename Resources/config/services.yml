@@ -1,0 +1,9 @@
+parameters:
+    ip_geo_base.class: Fenrizbes\IpGeoBaseBundle\Service\IpGeoBaseService
+
+services:
+    ip_geo_base:
+        class: %ip_geo_base.class%
+        arguments:
+            - @request_stack
+            - %ip_geo_base.config%
