@@ -2,8 +2,8 @@
 <database name="default" namespace="Fenrizbes\IpGeoBaseBundle\Propel\Model" defaultIdMethod="native">
 
     <table name="geo_ip_range">
-        <column name="begin" type="integer" sqlType="INTEGER UNSIGNED" required="true" primaryKey="true" />
-        <column name="end" type="integer" sqlType="INTEGER UNSIGNED" required="true" primaryKey="true" />
+        <column name="begin" type="bigint" required="true" primaryKey="true" />
+        <column name="end" type="bigint" required="true" primaryKey="true" />
         <column name="geo_city_id" type="integer" />
         <column name="country_code" type="varchar" size="2" />
         <column name="description" type="longvarchar" />
