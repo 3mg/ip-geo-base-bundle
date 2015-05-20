@@ -219,7 +219,10 @@ class UpdateCommand extends ContainerAwareCommand
         gc_enable();
 
         Propel::disableInstancePooling();
-        Propel::getConnection()->useDebug(false);
+        $con = Propel::getConnection();
+        if (method_exists($con, 'useDebug')) {
+            $con->useDebug(false);
+        }
 
         $output->writeln('Processing '. $base_name);
         $progress = $this->getHelperSet()->get('progress');
