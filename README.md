@@ -1,5 +1,12 @@
 # IpGeoBaseBundle
 
+[![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/it-blaster/ip-geo-base-bundle/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/it-blaster/ip-geo-base-bundle/?branch=master)
+[![Build Status](https://scrutinizer-ci.com/g/it-blaster/ip-geo-base-bundle/badges/build.png?b=master)](https://scrutinizer-ci.com/g/it-blaster/ip-geo-base-bundle/build-status/master)
+[![License](https://poser.pugx.org/it-blaster/ip-geo-base-bundle/license.svg)](https://packagist.org/packages/it-blaster/ip-geo-base-bundle)
+[![Total Downloads](https://poser.pugx.org/it-blaster/ip-geo-base-bundle/downloads)](https://packagist.org/packages/it-blaster/ip-geo-base-bundle)
+[![Latest Unstable Version](https://poser.pugx.org/it-blaster/ip-geo-base-bundle/v/unstable.svg)](https://packagist.org/packages/it-blaster/ip-geo-base-bundle)
+[![Latest Stable Version](https://poser.pugx.org/it-blaster/ip-geo-base-bundle/v/stable.svg)](https://packagist.org/packages/it-blaster/ip-geo-base-bundle)
+
 Work with the IpGeoBase's database using Propel
 
 ## Installation:
