@@ -2,10 +2,9 @@
 
 namespace Fenrizbes\IpGeoBaseBundle\Service;
 
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoCity;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoCityQuery;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoIpRange;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoIpRangeQuery;
+use Doctrine\ORM\EntityManager;
+use Fenrizbes\IpGeoBaseBundle\Entity\GeoCity;
+use Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 class IpGeoBaseService
@@ -14,6 +13,11 @@ class IpGeoBaseService
      * @var \Symfony\Component\HttpFoundation\RequestStack
      */
     protected $request_stack;
+    
+    /**
+     * @var \Doctrine\ORM\EntityManager
+     */
+    protected $em;
 
     /**
      * @var array
@@ -30,8 +34,9 @@ class IpGeoBaseService
      */
     protected $default_city;
 
-    public function __construct(RequestStack $request_stack, array $config)
+    public function __construct(RequestStack $request_stack, EntityManager $em, array $config)
     {
+        $this->em = $em;
         $this->request_stack = $request_stack;
         $this->config        = $config;
     }
@@ -65,7 +70,7 @@ class IpGeoBaseService
     {
         $range = $this->getIpInfo($ip);
 
-        if (!$range instanceof GeoIpRange || is_null($range->getGeoCityId())) {
+        if (!$range instanceof GeoIpRange || !$range->getGeoCity() instanceof GeoCity) {
             return $this->getDefaultCity();
         }
 
@@ -85,11 +90,12 @@ class IpGeoBaseService
         }
 
         $long = sprintf("%u", ip2long($ip));
+        
+        $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
+        $qb->where($qb->expr()->lte("r.begin", $long));
+        $qb->andWhere($qb->expr()->gte("r.end", $long));
 
-        return GeoIpRangeQuery::create()
-            ->filterByBegin($long, \Criteria::LESS_EQUAL)
-            ->filterByEnd($long, \Criteria::GREATER_EQUAL)
-            ->findOne();
+        return $qb->getQuery()->getOneOrNullResult();
     }
 
     /**
@@ -105,7 +111,7 @@ class IpGeoBaseService
         }
 
         if (is_null($this->default_city)) {
-            $this->default_city = GeoCityQuery::create()->findPk($this->config['default_city']);
+            $this->default_city = $this->em->find('FenrizbesIpGeoBaseBundle:GeoIpRange', $this->config['default_city']);
 
             if (!$this->default_city instanceof GeoCity) {
                 throw new \RuntimeException('The default city is not found');

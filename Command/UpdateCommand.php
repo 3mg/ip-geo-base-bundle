@@ -9,12 +9,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\HttpFoundation\File\Exception\FileException;
 use Symfony\Component\Console\Output\OutputInterface;
 use \ZipArchive;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoCity;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoCityQuery;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoIpRange;
-use Fenrizbes\IpGeoBaseBundle\Propel\Model\GeoIpRangeQuery;
-use \BasePeer;
-use \Propel;
+use Fenrizbes\IpGeoBaseBundle\Entity\GeoCity;
+use Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange;
 
 class UpdateCommand extends ContainerAwareCommand
 {
@@ -49,6 +45,11 @@ class UpdateCommand extends ContainerAwareCommand
     const RANGE_COLUMN_INDEX_DESCRIPTION = 2;
     const RANGE_COLUMN_INDEX_COUNTRY     = 3;
     const RANGE_COLUMN_INDEX_CITY        = 4;
+    
+    /**
+     * @var \Doctrine\ORM\EntityManager
+     */
+    protected $em;
 
     /**
      * {@inheritdoc}
@@ -69,6 +70,9 @@ class UpdateCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $this->em = $this->getContainer()->get('doctrine.orm.entity_manager');
+        $this->em->getConnection()->getConfiguration()->setSQLLogger(null);
+        
         $source = $input->getOption('source');
 
         if (filter_var($source, FILTER_VALIDATE_URL) === false) {
@@ -218,15 +222,10 @@ class UpdateCommand extends ContainerAwareCommand
 
         gc_enable();
 
-        Propel::disableInstancePooling();
-        $con = Propel::getConnection();
-        if (method_exists($con, 'useDebug')) {
-            $con->useDebug(false);
-        }
-
         $output->writeln('Processing '. $base_name);
-        $progress = $this->getHelperSet()->get('progress');
-        $progress->start($output, filesize($full_name));
+        $progress = new \Symfony\Component\Console\Helper\ProgressBar($output, filesize($full_name));
+        $progress->setFormat('debug');
+        $progress->start();
 
         switch ($base_name) {
             case static::FILE_CITIES:
@@ -260,10 +259,11 @@ class UpdateCommand extends ContainerAwareCommand
             }
 
             /** @var GeoCity $city */
-            $city = GeoCityQuery::create()
-                ->filterByid($raw_city[static::CITY_COLUMN_INDEX_ID])
-                ->findOneOrCreate()
-            ;
+            $city = $this->em->find('FenrizbesIpGeoBaseBundle:GeoCity', $raw_city[static::CITY_COLUMN_INDEX_ID]);
+            if(!$city instanceof GeoCity) {
+                $city = new GeoCity();
+                $city->setId($raw_city[static::CITY_COLUMN_INDEX_ID]);
+            }
 
             $city->setName($raw_city[static::CITY_COLUMN_INDEX_NAME]);
             $city->setRegion($raw_city[static::CITY_COLUMN_INDEX_REGION]);
@@ -271,8 +271,9 @@ class UpdateCommand extends ContainerAwareCommand
             $city->setLatitude($raw_city[static::CITY_COLUMN_INDEX_LATITUDE]);
             $city->setLongitude($raw_city[static::CITY_COLUMN_INDEX_LONGITUDE]);
 
-            $city->save();
-            $city->clearAllReferences(true);
+            $this->em->persist($city);
+            $this->em->flush();
+            $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
 
             $progress->advance(mb_strlen($buffer));
 
@@ -295,7 +296,7 @@ class UpdateCommand extends ContainerAwareCommand
      */
     protected function updateIpRange($resource, $progress)
     {
-        $current_time = date('Y-m-d H:i:s');
+        $current_time = new \DateTime();
 
         while (($buffer = fgets($resource, 4096)) !== false) {
             $raw_range = mb_split("\t+", trim($buffer));
@@ -304,25 +305,33 @@ class UpdateCommand extends ContainerAwareCommand
                 continue;
             }
 
+            $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
+            $qb->where($qb->expr()->lte("r.begin", $raw_range[static::RANGE_COLUMN_INDEX_BEGIN]));
+            $qb->andWhere($qb->expr()->gte("r.end", $raw_range[static::RANGE_COLUMN_INDEX_END]));
+    
             /** @var GeoIpRange $range */
-            $range = GeoIpRangeQuery::create()
-                ->filterByBegin($raw_range[static::RANGE_COLUMN_INDEX_BEGIN])
-                ->filterByEnd($raw_range[static::RANGE_COLUMN_INDEX_END])
-                ->findOneOrCreate()
-            ;
-
+            $range = $qb->getQuery()->getOneOrNullResult();
+            if(!$range instanceof GeoIpRange){
+                $range = new GeoIpRange();
+                $range->setBegin($raw_range[static::RANGE_COLUMN_INDEX_BEGIN]);
+                $range->setEnd($raw_range[static::RANGE_COLUMN_INDEX_END]);
+            }
+            
             $city_id = $raw_range[static::RANGE_COLUMN_INDEX_CITY];
             if (!preg_match('/^\d+$/', $city_id)) {
                 $city_id = null;
+                $range->setGeoCity();
+            } else {
+                $range->setGeoCity($this->em->getReference('FenrizbesIpGeoBaseBundle:GeoCity', $city_id));
             }
 
-            $range->setGeoCityId($city_id);
             $range->setCountryCode($raw_range[static::RANGE_COLUMN_INDEX_COUNTRY]);
             $range->setDescription($raw_range[static::RANGE_COLUMN_INDEX_DESCRIPTION]);
             $range->setUpdatedAt($current_time);
 
-            $range->save();
-            $range->clearAllReferences(true);
+            $this->em->persist($range);
+            $this->em->flush();
+            $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange');
 
             $progress->advance(mb_strlen($buffer));
 
@@ -335,9 +344,9 @@ class UpdateCommand extends ContainerAwareCommand
             unset($buffer);
         }
 
-        GeoIpRangeQuery::create()
-            ->filterByUpdatedAt($current_time, \Criteria::LESS_THAN)
-            ->delete()
-        ;
+        $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
+        $qb->delete();
+        $qb->where($qb->expr()->lte("r.updatedAt", $current_time));
+        $qb->getQuery()->execute();
     }
 }
