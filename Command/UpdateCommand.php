@@ -277,6 +277,9 @@ class UpdateCommand extends ContainerAwareCommand
             $city->setLongitude($raw_city[static::CITY_COLUMN_INDEX_LONGITUDE]);
             
             $this->em->persist($city);
+            
+            $metadata = $this->em->getClassMetaData(get_class($city));
+            $metadata->setIdGeneratorType(\Doctrine\ORM\Mapping\ClassMetadata::GENERATOR_TYPE_NONE);
             $this->em->flush();
             
             if($i % $batchSize == 0) {
