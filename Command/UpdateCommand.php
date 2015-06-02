@@ -251,12 +251,17 @@ class UpdateCommand extends ContainerAwareCommand
      */
     protected function updateCities($resource, $progress)
     {
+        $batchSize = 500;
+        $i = 0;
+        
         while(($buffer = fgets($resource, 4096)) !== false) {
             $raw_city = mb_split("\t+", mb_convert_encoding(trim($buffer), 'UTF-8', 'CP-1251'));
 
             if (count($raw_city) != static::FILE_CITIES_COLUMNS) {
                 continue;
             }
+            
+            $i++;
 
             /** @var GeoCity $city */
             $city = $this->em->find('FenrizbesIpGeoBaseBundle:GeoCity', $raw_city[static::CITY_COLUMN_INDEX_ID]);
@@ -270,22 +275,28 @@ class UpdateCommand extends ContainerAwareCommand
             $city->setDistrict($raw_city[static::CITY_COLUMN_INDEX_DISTRICT]);
             $city->setLatitude($raw_city[static::CITY_COLUMN_INDEX_LATITUDE]);
             $city->setLongitude($raw_city[static::CITY_COLUMN_INDEX_LONGITUDE]);
-
+            
             $this->em->persist($city);
             $this->em->flush();
-            $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
+            
+            if($i % $batchSize == 0) {
+                $this->em->flush();
+                $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
+            }
 
             $progress->advance(mb_strlen($buffer));
 
-            $city    = null;
+            //$city    = null;
             $rawCity = null;
             $buffer  = null;
 
-            unset($city);
+            //unset($city);
             unset($rawCity);
             unset($buffer);
         }
-
+        
+        $this->em->flush();
+        $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
     }
 
     /**
@@ -297,6 +308,11 @@ class UpdateCommand extends ContainerAwareCommand
     protected function updateIpRange($resource, $progress)
     {
         $current_time = new \DateTime();
+        
+        $batchSize = 10000;
+        $i = 0;
+        
+        $progress->setRedrawFrequency(1000);
 
         while (($buffer = fgets($resource, 4096)) !== false) {
             $raw_range = mb_split("\t+", trim($buffer));
@@ -304,6 +320,8 @@ class UpdateCommand extends ContainerAwareCommand
             if (count($raw_range) != static::FILE_IP_RANGE_COLUMNS) {
                 continue;
             }
+            
+            $i++;
 
             $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
             $qb->where($qb->expr()->lte("r.begin", $raw_range[static::RANGE_COLUMN_INDEX_BEGIN]));
@@ -330,19 +348,27 @@ class UpdateCommand extends ContainerAwareCommand
             $range->setUpdatedAt($current_time);
 
             $this->em->persist($range);
-            $this->em->flush();
-            $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange');
+            
+            if($i % $batchSize == 0) {
+                $this->em->flush();
+                $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange');
+                $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
+            }
 
             $progress->advance(mb_strlen($buffer));
 
-            $range    = null;
+            //$range    = null;
             $rawRange = null;
             $buffer   = null;
 
-            unset($range);
+            //unset($range);
             unset($rawRange);
             unset($buffer);
         }
+        
+        $this->em->flush();
+        $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange');
+        $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
 
         $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
         $qb->delete();
