@@ -182,4 +182,3 @@ class GeoIpRange
         return $this->geoCity;
     }
 }
-

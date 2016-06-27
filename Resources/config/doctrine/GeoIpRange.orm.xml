@@ -4,6 +4,9 @@
     <indexes>
       <index name="geo_ip_range_I_1" columns="updated_at"/>
       <index name="geo_ip_range_FI_1" columns="geo_city_id"/>
+      <index name="geo_ip_range_begin_end" columns="begin,end"/>
+      <index name="geo_ip_range_begin" columns="begin"/>
+      <index name="geo_ip_range_end" columns="end"/>
     </indexes>
     <id name="begin" type="bigint" column="begin"/>
     <id name="end" type="bigint" column="end"/>

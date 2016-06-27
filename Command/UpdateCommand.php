@@ -284,7 +284,8 @@ class UpdateCommand extends ContainerAwareCommand
             
             if($i % $batchSize == 0) {
                 $this->em->flush();
-                $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
+                $this->em->clear();
+                //$this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
             }
 
             $progress->advance(mb_strlen($buffer));
@@ -310,12 +311,14 @@ class UpdateCommand extends ContainerAwareCommand
      */
     protected function updateIpRange($resource, $progress)
     {
+        gc_enable();
         $current_time = new \DateTime();
         
-        $batchSize = 10000;
+        $batchSize = 500;
         $i = 0;
         
-        $progress->setRedrawFrequency(1000);
+        $progress->setRedrawFrequency(100);
+        $this->em->beginTransaction();
 
         while (($buffer = fgets($resource, 4096)) !== false) {
             $raw_range = mb_split("\t+", trim($buffer));
@@ -325,53 +328,70 @@ class UpdateCommand extends ContainerAwareCommand
             }
             
             $i++;
-
-            $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
-            $qb->where($qb->expr()->lte("r.begin", $raw_range[static::RANGE_COLUMN_INDEX_BEGIN]));
-            $qb->andWhere($qb->expr()->gte("r.end", $raw_range[static::RANGE_COLUMN_INDEX_END]));
-    
-            /** @var GeoIpRange $range */
-            $range = $qb->getQuery()->getOneOrNullResult();
-            if(!$range instanceof GeoIpRange){
-                $range = new GeoIpRange();
-                $range->setBegin($raw_range[static::RANGE_COLUMN_INDEX_BEGIN]);
-                $range->setEnd($raw_range[static::RANGE_COLUMN_INDEX_END]);
-            }
             
             $city_id = $raw_range[static::RANGE_COLUMN_INDEX_CITY];
+            
             if (!preg_match('/^\d+$/', $city_id)) {
                 $city_id = null;
-                $range->setGeoCity();
-            } else {
-                $range->setGeoCity($this->em->getReference('FenrizbesIpGeoBaseBundle:GeoCity', $city_id));
             }
 
-            $range->setCountryCode($raw_range[static::RANGE_COLUMN_INDEX_COUNTRY]);
-            $range->setDescription($raw_range[static::RANGE_COLUMN_INDEX_DESCRIPTION]);
-            $range->setUpdatedAt($current_time);
+            $sql = "SELECT * FROM geo_ip_range r WHERE r.begin >= :range_begin AND r.end <= :range_end";
+            $query = $this->em->getConnection()->prepare($sql);
+            $query->execute(array(
+                "range_begin" => $raw_range[static::RANGE_COLUMN_INDEX_BEGIN],
+                "range_end" => $raw_range[static::RANGE_COLUMN_INDEX_END],
+            ));
+            $range = $query->fetch();
 
-            $this->em->persist($range);
+            if($range===false){
+                $sql = "INSERT INTO geo_ip_range 
+                        (begin, end, geo_city_id, country_code, description, updated_at) 
+                        VALUES 
+                        (:begin, :end, :city_id, :country_code, :description, :updated_at)";
+                $range_begin = $raw_range[static::RANGE_COLUMN_INDEX_BEGIN];
+                $range_end = $raw_range[static::RANGE_COLUMN_INDEX_END];
+            } else {
+                $sql = "UPDATE geo_ip_range SET
+                        geo_city_id=:city_id, country_code=:country_code,  
+                        description=:description,  updated_at=:updated_at
+                        WHERE begin=:begin AND end=:end";
+                $range_begin = $range['begin'];
+                $range_end = $range['end'];
+            }
+
+            $query = $this->em->getConnection()->prepare($sql);
+            $query->execute(array(
+                "begin" => $range_begin,
+                "end" => $range_end,
+                "city_id" => $city_id,
+                "country_code" => $raw_range[static::RANGE_COLUMN_INDEX_COUNTRY],
+                "description" => $raw_range[static::RANGE_COLUMN_INDEX_DESCRIPTION],
+                "updated_at" => $current_time->format('Y-m-d H:i:s'),
+            ));
             
+
             if($i % $batchSize == 0) {
-                $this->em->flush();
-                $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange');
-                $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
+                if($this->em->getConnection()->isTransactionActive()){
+                    $this->em->commit();
+                    $this->em->beginTransaction();
+                }
+                gc_collect_cycles();
             }
 
             $progress->advance(mb_strlen($buffer));
 
-            //$range    = null;
+            $range    = null;
             $rawRange = null;
             $buffer   = null;
 
-            //unset($range);
+            unset($range);
             unset($rawRange);
             unset($buffer);
         }
         
-        $this->em->flush();
-        $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoIpRange');
-        $this->em->clear('Fenrizbes\IpGeoBaseBundle\Entity\GeoCity');
+        if($this->em->getConnection()->isTransactionActive()){
+            $this->em->commit();
+        }
 
         $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
         $qb->delete();

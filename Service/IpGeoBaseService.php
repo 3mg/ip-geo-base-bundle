@@ -92,6 +92,8 @@ class IpGeoBaseService
         $long = sprintf("%u", ip2long($ip));
         
         $qb = $this->em->getRepository('FenrizbesIpGeoBaseBundle:GeoIpRange')->createQueryBuilder('r');
+        $qb->select("r,c");
+        $qb->leftJoin("r.geoCity", "c");
         $qb->where($qb->expr()->lte("r.begin", $long));
         $qb->andWhere($qb->expr()->gte("r.end", $long));
 

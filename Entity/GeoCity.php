@@ -180,4 +180,3 @@ class GeoCity
         return $this;
     }
 }
-
