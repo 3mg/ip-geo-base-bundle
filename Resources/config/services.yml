@@ -5,6 +5,6 @@ services:
     ip_geo_base:
         class: %ip_geo_base.class%
         arguments:
-            - @request_stack
-            - @doctrine.orm.entity_manager
+            - '@request_stack'
+            - '@doctrine.orm.entity_manager'
             - %ip_geo_base.config%
